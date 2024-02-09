@@ -2,7 +2,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  name: pac-demo
+  name: plumbing
   annotations:
     # The event we are targeting as seen from the webhook payload
     # this can be an array too, i.e: [pull_request, push]
@@ -15,16 +15,16 @@ metadata:
     # with taskRef and it will automatically be embedded into our pipeline.
     pipelinesascode.tekton.dev/task: "git-clone"
 
-    # Use golangci-lint from the hub to test our Golang project
-    pipelinesascode.tekton.dev/task-1: "golangci-lint"
+    # Use maven task from hub
+    #
+    # pipelinesascode.tekton.dev/task-1: "maven"
 
-    # You can add more tasks by increasing the suffix number, you can specify
-    # them as array to have multiple of them.
+    # You can add more tasks by increasing the suffix number, you can specify them as array to have multiple of them.
     # browse the tasks you want to include from hub on https://hub.tekton.dev/
     #
     # pipelinesascode.tekton.dev/task-2: "[curl, buildah]"
 
-    # how many runs we want to keep attached to this event
+    # How many runs we want to keep.
     pipelinesascode.tekton.dev/max-keep-runs: "5"
 spec:
   params:
@@ -45,6 +45,7 @@ spec:
       - name: fetch-repository
         taskRef:
           name: git-clone
+          kind: ClusterTask
         workspaces:
           - name: output
             workspace: source
@@ -55,29 +56,34 @@ spec:
             value: $(params.repo_url)
           - name: revision
             value: $(params.revision)
-      - name: golangci-lint
-        taskRef:
-          name: golangci-lint
+      # Customize this task if you like, or just do a taskRef
+      # to one of the hub task.
+      - name: noop-task
         runAfter:
           - fetch-repository
-        params:
-          - name: package
-            value: .
         workspaces:
           - name: source
             workspace: source
-
+        taskSpec:
+          workspaces:
+            - name: source
+          steps:
+            - name: noop-task
+              image: registry.access.redhat.com/ubi9/ubi-micro
+              workingDir: $(workspaces.source.path)
+              script: |
+                exit 0
   workspaces:
-    - name: source
-      volumeClaimTemplate:
-        spec:
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 1Gi
-    # This workspace will inject secret to help the git-clone task to be able to
-    # checkout the private repositories
-    - name: basic-auth
-      secret:
-        secretName: "{{ git_auth_secret }}"
+  - name: source
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+  # This workspace will inject secret to help the git-clone task to be able to
+  # checkout the private repositories
+  - name: basic-auth
+    secret:
+      secretName: "{{ git_auth_secret }}"
